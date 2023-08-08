@@ -1,53 +1,44 @@
-import { User } from "@/models/user";
-import { connectDB, cookieSetter, generateToken } from "@/utils/features";
-import bcrypt  from 'bcrypt'
+import { asyncError, errorHandler } from "../../../middlewares/error";
+import { User } from "../../../models/user";
+import {
+  connectDB,
+  cookieSetter,
+  generateToken,
+} from "../../../utils/features";
+import bcrypt from "bcrypt"; 
+const handler = asyncError(async (req, res) => {
+  if (req.method !== "POST")
+    return errorHandler(res, 400, "Only POST Method is allowed");
+
+  const { name, email, password } = req.body;
+  await connectDB();
+console.log(name,email, password)
+
+  if (!name || !email || !password)
+    return errorHandler(res, 400, "Please enter all fields");
 
 
-const { asyncError, errorHandler } = require("@/middleware/error");
+  let user = await User.findOne({ email });
 
+  if (user) return errorHandler(res, 400, "User registered with this email");
 
+  const hashedPassword = await bcrypt.hash(password, 10);
 
+  user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+  });
 
-const register =
-  (  async (req, res) => {
+  const token = generateToken(user._id);
 
-        if (req.method !== "POST") {
-            return errorHandler(res, 400, 'only post method is allowed')
-        }
+  cookieSetter(res, token, true);
 
-        try {
-            const { email, password, name } = req.body;
-            if (!email || !password || !name) return errorHandler(res, 500, 'please provide all the fields')
+  res.status(201).json({
+    success: true,
+    message: "Registered Successfully",
+    user,
+  });
+});
 
-            await connectDB();
-
-            let user = await User.findOne({ email });
-
-            if (user) return errorHandler(res, 500, 'user already exist')
-
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            user = await User.create({
-                email, password: hashedPassword, name
-            })
-            console.log(user._id.toString())
-            const token = await generateToken(user._id.toString())
-            // console.log(token)
-            cookieSetter(res, token, true);
-
-
-            return res.status(201).json({
-                success: true,
-                message: 'successfully registered in'
-            })
-        } catch (error) {
-            console.log(error);
-            res.status(500).json({
-                success: false,
-                msg: 'internal server error'
-            })
-        }
-    }
-)
-
-export default register
+export default handler;

@@ -1,46 +1,40 @@
-import { User } from "@/models/user";
-import { connectDB } from "@/utils/features";
-import bcrypt from 'bcrypt'
-import {generateToken, cookieSetter}  from '@/utils/features'
-const { asyncError, errorHandler } = require("@/middleware/error");
+import { asyncError, errorHandler } from "../../../middlewares/error";
+import { User } from "../../../models/user";
+import {
+  connectDB,
+  cookieSetter,
+  generateToken,
+} from "../../../utils/features";
+import bcrypt from "bcrypt";
+
+const handler = asyncError(async (req, res) => {
+  if (req.method !== "POST")
+    return errorHandler(res, 400, "Only POST Method is allowed");
+
+  await connectDB();
+  const { email, password } = req.body;
+  console.log(req.body.email, req.body.password)
+  if (!email || !password)
+    return errorHandler(res, 400, "Please enter all fields");
 
 
+  const user = await User.findOne({ email }).select("+password");
 
- const login = asyncError(
-    async (req, res) => {
-        console.log('login')
-        const { email, password } = req.body;
-        if (!email || !password) return errorHandler(res, 500, 'please provide all the fields')
+  if (!user) return errorHandler(res, 400, "Invalid Email or Password");
 
-        await connectDB();
+  const isMatch = await bcrypt.compare(password, user.password);
 
-        const user = await User.findOne({email}).select("+password");
+  if (!isMatch) return errorHandler(res, 400, "Invalid Email or Password");
 
-        if(!user) return errorHandler(res, 500, 'no user found with this email')
+  const token = generateToken(user._id);
 
-        const isMatch = await bcrypt.compare(password, user.password)
+  cookieSetter(res, token, true);
 
+  res.status(200).json({
+    success: true,
+    message: `Welcome back, ${user.name}`,
+    user,
+  });
+});
 
-
-        console.log(isMatch, 'isMatchs')
-
-       if(!isMatch){
-        console.log(isMatch, 'isMatch')
-        return errorHandler(res, 401, 'wrong passwrod or email')
-       }
-       
-       const token = await generateToken(user._id.toString())
-       cookieSetter(res,token, true);
-
-
-
-       return res.status(200).json({
-        success:true,
-        msg:`welcome back ${user.name}`
-       })
-
-    }
-)
-
-
-export default login
+export default handler;
